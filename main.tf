@@ -27,10 +27,11 @@ locals {
 
   #subnet_cidrs  = ["10.10.50.0/24"]
   #subnet_name   = "my_vpc_subnet"
-  nginx_count = "1"
-  backend_count = "2"
-  iscsi_count   = "1"
-  db_count      = "3"
+  nginx_count    = "1"
+  backend_count  = "2"
+  iscsi_count    = "1"
+  db_count       = "3"
+  proxysql_count = "1"
   /*
   disk = {
     "web" = {
@@ -210,13 +211,44 @@ data "yandex_compute_instance" "db-servers" {
   depends_on = [module.db-servers]
 }
 
+module "proxysql-servers" {
+  source         = "./modules/instances"
+  count          = local.proxysql_count
+  vm_name        = "proxysql-${format("%02d", count.index + 1)}"
+  vpc_name       = local.vpc_name
+  #folder_id      = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
+  network_interface = {
+    for subnet in yandex_vpc_subnet.subnets :
+    subnet.name => {
+      subnet_id = subnet.id
+      nat       = true
+    }
+    if subnet.name == "loadbalancer-subnet"
+  }
+  #subnet_cidrs   = yandex_vpc_subnet.subnet.v4_cidr_blocks
+  #subnet_name    = yandex_vpc_subnet.subnet.name
+  #subnet_id      = yandex_vpc_subnet.subnet.id
+  vm_user        = local.vm_user
+  ssh_public_key = local.ssh_public_key
+  secondary_disk = {}
+  depends_on     = [yandex_compute_disk.disks]
+}
+
+data "yandex_compute_instance" "proxysql-servers" {
+  count      = length(module.proxysql-servers)
+  name       = module.proxysql-servers[count.index].vm_name
+  #folder_id  = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
+  depends_on = [module.proxysql-servers]
+}
+
 resource "local_file" "inventory_file" {
   content = templatefile("${path.module}/templates/inventory.tpl",
     {
-      nginx-servers   = data.yandex_compute_instance.nginx-servers
-      backend-servers = data.yandex_compute_instance.backend-servers
-      iscsi-servers   = data.yandex_compute_instance.iscsi-servers
-      db-servers      = data.yandex_compute_instance.db-servers
+      nginx-servers    = data.yandex_compute_instance.nginx-servers
+      backend-servers  = data.yandex_compute_instance.backend-servers
+      iscsi-servers    = data.yandex_compute_instance.iscsi-servers
+      db-servers       = data.yandex_compute_instance.db-servers
+      proxysql-servers = data.yandex_compute_instance.proxysql-servers
     }
   )
   filename = "${path.module}/inventory.ini"
@@ -225,11 +257,12 @@ resource "local_file" "inventory_file" {
 resource "local_file" "group_vars_all_file" {
   content = templatefile("${path.module}/templates/group_vars_all.tpl",
     {
-      nginx-servers   = data.yandex_compute_instance.nginx-servers
-      backend-servers = data.yandex_compute_instance.backend-servers
-      iscsi-servers   = data.yandex_compute_instance.iscsi-servers
-      db-servers      = data.yandex_compute_instance.db-servers
-      subnet_cidrs    = yandex_vpc_subnet.subnets["loadbalancer-subnet"].v4_cidr_blocks
+      nginx-servers    = data.yandex_compute_instance.nginx-servers
+      backend-servers  = data.yandex_compute_instance.backend-servers
+      iscsi-servers    = data.yandex_compute_instance.iscsi-servers
+      db-servers       = data.yandex_compute_instance.db-servers
+      proxysql-servers = data.yandex_compute_instance.proxysql-servers
+      subnet_cidrs     = yandex_vpc_subnet.subnets["loadbalancer-subnet"].v4_cidr_blocks
     }
   )
   filename = "${path.module}/group_vars/all/main.yml"

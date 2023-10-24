@@ -96,8 +96,8 @@
     ansible.builtin.dnf: 
       update_cache: yes
 
-  #- name: percona-release setup ps80
-  #  ansible.builtin.shell: echo 'y' | percona-release setup ps80
+  - name: percona-release setup pxc-80
+    ansible.builtin.shell: echo 'y' | percona-release setup pxc-80
 
   # dnf install Percona-Server-server-80
   - name: Install packages
@@ -107,7 +107,77 @@
         #- python3-PyMySQL
       state: latest
 
-  
+    # systemctl restart percona
+  - name: Restart Percona service
+    ansible.builtin.service:
+      name: mysql
+      state: restarted
+
+  - name: Get temporary mysql root password
+    ansible.builtin.shell: grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}' | tail -n 1
+    register: temp_mysql_root_password
+
+#- ansible.builtin.debug: 
+#    var: temp_mysql_root_password.stdout
+
+  - ansible.builtin.debug: 
+      msg: "{{ temp_mysql_root_password.stdout }}"
+
+  - name: Create .my.cnf file for root user
+    ansible.builtin.copy:
+      dest: "{{ ansible_env.HOME }}/.my.cnf"
+      mode: 0600
+      content: |
+        [client]
+        user={{ mysql_root_user | quote }}
+        password={{ temp_mysql_root_password.stdout | quote }}
+
+  - name: Set new root password
+    ansible.builtin.shell: mysql --connect-expired-password -e "ALTER USER '{{ mysql_root_user }}'@'localhost' IDENTIFIED WITH mysql_native_password BY '{{ mysql_root_password }}';"
+    changed_when: false
+    failed_when: false
+
+  - name: Change root password in .my.cnf.
+    ansible.builtin.lineinfile:
+      path: "{{ ansible_env.HOME }}/.my.cnf"
+      state: present
+      regexp: '^.?password=*'
+      line: "password={{ mysql_root_password | quote }}"
+
+    # systemctl stop percona
+  - name: Stop Percona service
+    ansible.builtin.service:
+      name: mysql
+      state: stopped
+
+  - name: Change root password in .my.cnf.
+    ansible.builtin.lineinfile:
+      path: /etc/my.cnf
+      state: present
+      regexp: "{{ item.key }}"
+      line: "{{ item.value }}"
+    with_items: 
+     - { key: '^wsrep_provider=', value: 'wsrep_provider=/usr/lib64/galera4/libgalera_smm.so' }
+     - { key: '^wsrep_cluster_name=', value: 'wsrep_cluster_name=pxc-cluster' }
+     - { key: '^wsrep_cluster_address=gcomm://', value: 'wsrep_cluster_address=gcomm://{{ ip_address["db-01"] }},{{ ip_address["db-02"] }},{{ ip_address["db-03"] }}' }
+     - { key: '^wsrep_node_name=', value: 'wsrep_node_name={{ ansible_hostname }}' }
+     - { key: 'wsrep_node_address=', value: 'wsrep_node_address={{ ansible_host }}' }
 
   when: ansible_os_family == "RedHat"
+
+# systemctl start mysql@bootstrap.service
+- name: Start mysql@bootstrap service
+  ansible.builtin.service:
+    name: mysql@bootstrap
+    state: started
+    #enabled: true
+  when: "ansible_hostname in 'db-01'"
+
+# systemctl start mysql@bootstrap.service
+- name: Start mysql@bootstrap service
+  ansible.builtin.service:
+    name: mysql
+    state: started
+    #enabled: true
+  when: "ansible_hostname not in 'db-01'"
 

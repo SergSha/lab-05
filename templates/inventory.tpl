@@ -12,6 +12,9 @@ ${ iscsi-server["name"] } ansible_host=${ iscsi-server.network_interface[0].nat_
 %{ for db-server in db-servers ~}
 ${ db-server["name"] } ansible_host=${ db-server.network_interface[0].nat_ip_address }
 %{ endfor ~}
+%{ for proxysql-server in proxysql-servers ~}
+${ proxysql-server["name"] } ansible_host=${ proxysql-server.network_interface[0].nat_ip_address }
+%{ endfor ~}
 
 [nginx_servers]
 %{ for nginx-server in nginx-servers ~}
@@ -31,4 +34,9 @@ ${ iscsi-server["name"] }
 [db_servers]
 %{ for db-server in db-servers ~}
 ${ db-server["name"] }
+%{ endfor ~}
+
+[proxysql_servers]
+%{ for proxysql-server in proxysql-servers ~}
+${ proxysql-server["name"] }
 %{ endfor ~}
