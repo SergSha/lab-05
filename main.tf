@@ -1,7 +1,7 @@
 locals {
   vm_user         = "cloud-user"
-  ssh_public_key  = "~/.ssh/id_rsa.pub"
-  ssh_private_key = "~/.ssh/id_rsa"
+  ssh_public_key  = "~/.ssh/otus.pub"
+  ssh_private_key = "~/.ssh/otus"
   #vm_name         = "instance"
   vpc_name        = "my_vpc_network"
 
@@ -79,7 +79,7 @@ resource "yandex_vpc_subnet" "subnets" {
   v4_cidr_blocks = each.value["v4_cidr_blocks"]
   zone           = local.zone
   network_id     = data.yandex_vpc_network.vpc.id
-  route_table_id = yandex_vpc_route_table.rt.id
+  #route_table_id = yandex_vpc_route_table.rt.id
 }
 
 #data "yandex_vpc_subnet" "subnets" {
@@ -101,6 +101,8 @@ resource "yandex_vpc_route_table" "rt" {
   static_route {
     destination_prefix = "0.0.0.0/0"
     gateway_id         = yandex_vpc_gateway.nat_gateway.id
+    #next_hop_address   = yandex_compute_instance.nat-instance.network_interface.0.ip_address
+    #next_hop_address = data.yandex_lb_network_load_balancer.keepalived.internal_address_spec.0.address
   }
 }
 
@@ -325,23 +327,23 @@ resource "yandex_lb_target_group" "keepalived_group" {
     }
   }
 }
-
+/*
 resource "yandex_lb_target_group" "ssh_group" {
   name      = "ssh-group"
   region_id = "ru-central1"
   #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
 
   dynamic "target" {
-    for_each = data.yandex_compute_instance.backend-servers[*].network_interface.0.ip_address
+    for_each = data.yandex_compute_instance.nginx-servers[*].network_interface.0.ip_address
     content {
       subnet_id = yandex_vpc_subnet.subnets["loadbalancer-subnet"].id
       address   = target.value
     }
   }
 }
-
+*/
 resource "yandex_lb_network_load_balancer" "keepalived" {
-  name = "my-network-load-balancer"
+  name = "network-load-balancer"
   #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
 
   listener {
@@ -351,7 +353,7 @@ resource "yandex_lb_network_load_balancer" "keepalived" {
       ip_version = "ipv4"
     }
   }
-
+  /*
   listener {
     name = "ssh-listener"
     port = 22
@@ -359,7 +361,7 @@ resource "yandex_lb_network_load_balancer" "keepalived" {
       ip_version = "ipv4"
     }
   }
-
+  */
   attached_target_group {
     target_group_id = yandex_lb_target_group.keepalived_group.id
 
@@ -371,22 +373,21 @@ resource "yandex_lb_network_load_balancer" "keepalived" {
       }
     }
   }
-
+  /*
   attached_target_group {
-    target_group_id = yandex_lb_target_group.ssh_group.id
+    target_group_id = yandex_lb_target_group.keepalived_group.id
 
     healthcheck {
       name = "ssh"
-      http_options {
+      tcp_options {
         port = 22
-        path = "/ping"
       }
     }
-  }
+  }*/
 }
 
 data "yandex_lb_network_load_balancer" "keepalived" {
-  name = "my-network-load-balancer"
+  name = "network-load-balancer"
   #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
   depends_on = [yandex_lb_network_load_balancer.keepalived]
 }
