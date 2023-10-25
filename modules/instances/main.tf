@@ -33,15 +33,15 @@ resource "yandex_compute_instance" "instances" {
       auto_delete = lookup(secondary_disk.value, "auto_delete", true)
       #auto_delete = var.disk_auto_delete
       #mode        = var.disk_mode
-      mode = lookup(secondary_disk.value, "mode", "READ_WRITE")
+      mode        = lookup(secondary_disk.value, "mode", "READ_WRITE")
     }
   }
 
   #network_interface {
-  #  subnet_id          = var.subnet_id
-  #  nat                = var.nat
-  #  ip_address         = var.internal_ip_address
-  #  nat_ip_address     = var.nat_ip_address
+  #  subnet_id      = var.subnet_id
+  #  nat            = var.nat
+  #  ip_address     = var.internal_ip_address
+  #  nat_ip_address = var.nat_ip_address
   #}
 
   dynamic "network_interface" {

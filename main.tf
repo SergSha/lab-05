@@ -27,7 +27,7 @@ locals {
 
   #subnet_cidrs  = ["10.10.50.0/24"]
   #subnet_name   = "my_vpc_subnet"
-  nginx_count    = "1"
+  nginx_count    = "2"
   backend_count  = "2"
   iscsi_count    = "1"
   db_count       = "3"
@@ -58,6 +58,11 @@ resource "yandex_vpc_network" "vpc" {
   name      = local.vpc_name
 }
 
+data "yandex_vpc_network" "vpc" {
+  #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
+  name      = yandex_vpc_network.vpc.name
+}
+
 #resource "yandex_vpc_subnet" "subnet" {
 #  count          = length(local.subnet_cidrs)
 #  #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
@@ -73,7 +78,8 @@ resource "yandex_vpc_subnet" "subnets" {
   #folder_id      = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
   v4_cidr_blocks = each.value["v4_cidr_blocks"]
   zone           = local.zone
-  network_id     = yandex_vpc_network.vpc.id
+  network_id     = data.yandex_vpc_network.vpc.id
+  route_table_id = yandex_vpc_route_table.rt.id
 }
 
 #data "yandex_vpc_subnet" "subnets" {
@@ -82,6 +88,21 @@ resource "yandex_vpc_subnet" "subnets" {
 #  #folder_id      = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
 #  depends_on = [yandex_vpc_subnet.subnets]
 #}
+
+resource "yandex_vpc_gateway" "nat_gateway" {
+  name = "test-gateway"
+  shared_egress_gateway {}
+}
+
+resource "yandex_vpc_route_table" "rt" {
+  name       = "test-route-table"
+  network_id = yandex_vpc_network.vpc.id
+
+  static_route {
+    destination_prefix = "0.0.0.0/0"
+    gateway_id         = yandex_vpc_gateway.nat_gateway.id
+  }
+}
 
 module "nginx-servers" {
   source         = "./modules/instances"
@@ -93,7 +114,7 @@ module "nginx-servers" {
     for subnet in yandex_vpc_subnet.subnets :
     subnet.name => {
       subnet_id = subnet.id
-      nat       = true
+      #nat       = true
     }
     if subnet.name == "loadbalancer-subnet" #|| subnet.name == "nginx-subnet"
   }
@@ -123,7 +144,7 @@ module "backend-servers" {
     for subnet in yandex_vpc_subnet.subnets :
     subnet.name => {
       subnet_id = subnet.id
-      nat       = true
+      #nat       = true
     }
     if subnet.name == "loadbalancer-subnet" #|| subnet.name == "backend-subnet"
   }
@@ -153,7 +174,7 @@ module "iscsi-servers" {
     for subnet in yandex_vpc_subnet.subnets :
     subnet.name => {
       subnet_id = subnet.id
-      nat       = true
+      #nat       = true
     }
     if subnet.name == "loadbalancer-subnet" #|| subnet.name == "backend-subnet"
   }
@@ -191,7 +212,7 @@ module "db-servers" {
     for subnet in yandex_vpc_subnet.subnets :
     subnet.name => {
       subnet_id = subnet.id
-      nat       = true
+      #nat       = true
     }
     if subnet.name == "loadbalancer-subnet"
   }
@@ -221,7 +242,7 @@ module "proxysql-servers" {
     for subnet in yandex_vpc_subnet.subnets :
     subnet.name => {
       subnet_id = subnet.id
-      nat       = true
+      #nat       = true
     }
     if subnet.name == "loadbalancer-subnet"
   }
@@ -292,7 +313,7 @@ resource "yandex_compute_disk" "disks" {
 #}
 
 resource "yandex_lb_target_group" "keepalived_group" {
-  name      = "my-keepalived-group"
+  name      = "keepalived-group"
   region_id = "ru-central1"
   #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
 
@@ -305,13 +326,35 @@ resource "yandex_lb_target_group" "keepalived_group" {
   }
 }
 
+resource "yandex_lb_target_group" "ssh_group" {
+  name      = "ssh-group"
+  region_id = "ru-central1"
+  #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
+
+  dynamic "target" {
+    for_each = data.yandex_compute_instance.backend-servers[*].network_interface.0.ip_address
+    content {
+      subnet_id = yandex_vpc_subnet.subnets["loadbalancer-subnet"].id
+      address   = target.value
+    }
+  }
+}
+
 resource "yandex_lb_network_load_balancer" "keepalived" {
   name = "my-network-load-balancer"
   #folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
 
   listener {
-    name = "my-listener"
+    name = "http-listener"
     port = 80
+    external_address_spec {
+      ip_version = "ipv4"
+    }
+  }
+
+  listener {
+    name = "ssh-listener"
+    port = 22
     external_address_spec {
       ip_version = "ipv4"
     }
@@ -324,6 +367,18 @@ resource "yandex_lb_network_load_balancer" "keepalived" {
       name = "http"
       http_options {
         port = 80
+        path = "/ping"
+      }
+    }
+  }
+
+  attached_target_group {
+    target_group_id = yandex_lb_target_group.ssh_group.id
+
+    healthcheck {
+      name = "ssh"
+      http_options {
+        port = 22
         path = "/ping"
       }
     }
