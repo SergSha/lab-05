@@ -32,6 +32,7 @@ locals {
   iscsi_count    = "1"
   db_count       = "3"
   proxysql_count = "1"
+  jump_count = "1"
   /*
   disk = {
     "web" = {
@@ -79,7 +80,7 @@ resource "yandex_vpc_subnet" "subnets" {
   v4_cidr_blocks = each.value["v4_cidr_blocks"]
   zone           = local.zone
   network_id     = data.yandex_vpc_network.vpc.id
-  #route_table_id = yandex_vpc_route_table.rt.id
+  route_table_id = yandex_vpc_route_table.rt.id
 }
 
 #data "yandex_vpc_subnet" "subnets" {
@@ -264,6 +265,36 @@ data "yandex_compute_instance" "proxysql-servers" {
   depends_on = [module.proxysql-servers]
 }
 
+module "jump-servers" {
+  source         = "./modules/instances"
+  count          = local.jump_count
+  vm_name        = "jump-${format("%02d", count.index + 1)}"
+  vpc_name       = local.vpc_name
+  #folder_id      = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
+  network_interface = {
+    for subnet in yandex_vpc_subnet.subnets :
+    subnet.name => {
+      subnet_id = subnet.id
+      nat       = true
+    }
+    if subnet.name == "loadbalancer-subnet"
+  }
+  #subnet_cidrs   = yandex_vpc_subnet.subnet.v4_cidr_blocks
+  #subnet_name    = yandex_vpc_subnet.subnet.name
+  #subnet_id      = yandex_vpc_subnet.subnet.id
+  vm_user        = local.vm_user
+  ssh_public_key = local.ssh_public_key
+  secondary_disk = {}
+  depends_on     = [yandex_compute_disk.disks]
+}
+
+data "yandex_compute_instance" "jump-servers" {
+  count      = length(module.jump-servers)
+  name       = module.jump-servers[count.index].vm_name
+  #folder_id  = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
+  depends_on = [module.jump-servers]
+}
+
 resource "local_file" "inventory_file" {
   content = templatefile("${path.module}/templates/inventory.tpl",
     {
@@ -272,6 +303,8 @@ resource "local_file" "inventory_file" {
       iscsi-servers    = data.yandex_compute_instance.iscsi-servers
       db-servers       = data.yandex_compute_instance.db-servers
       proxysql-servers = data.yandex_compute_instance.proxysql-servers
+      jump-servers     = data.yandex_compute_instance.jump-servers
+      remote_user      = local.vm_user
     }
   )
   filename = "${path.module}/inventory.ini"
@@ -285,6 +318,7 @@ resource "local_file" "group_vars_all_file" {
       iscsi-servers    = data.yandex_compute_instance.iscsi-servers
       db-servers       = data.yandex_compute_instance.db-servers
       proxysql-servers = data.yandex_compute_instance.proxysql-servers
+      jump-servers     = data.yandex_compute_instance.jump-servers
       subnet_cidrs     = yandex_vpc_subnet.subnets["loadbalancer-subnet"].v4_cidr_blocks
     }
   )
@@ -375,7 +409,7 @@ resource "yandex_lb_network_load_balancer" "keepalived" {
   }
   /*
   attached_target_group {
-    target_group_id = yandex_lb_target_group.keepalived_group.id
+    target_group_id = yandex_lb_target_group.ssh_group.id
 
     healthcheck {
       name = "ssh"

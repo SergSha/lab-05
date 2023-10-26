@@ -165,19 +165,19 @@
 
   when: ansible_os_family == "RedHat"
 
-# systemctl start mysql@bootstrap.service
-- name: Start mysql@bootstrap service
-  ansible.builtin.service:
-    name: mysql@bootstrap
-    state: started
-    #enabled: true
-  when: "ansible_hostname in 'db-01'"
+## systemctl start mysql@bootstrap.service
+#- name: Start mysql@bootstrap service
+#  ansible.builtin.service:
+#    name: mysql@bootstrap
+#    state: started
+#    #enabled: true
+#  when: "ansible_hostname in 'db-01'"
 
-# systemctl start mysql@bootstrap.service
-- name: Start mysql@bootstrap service
-  ansible.builtin.service:
-    name: mysql
-    state: started
-    #enabled: true
-  when: "ansible_hostname not in 'db-01'"
+## systemctl start mysql@bootstrap.service
+#- name: Start mysql@bootstrap service
+#  ansible.builtin.service:
+#    name: mysql
+#    state: started
+#    #enabled: true
+#  when: "ansible_hostname not in 'db-01'"
 
