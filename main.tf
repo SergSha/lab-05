@@ -29,9 +29,9 @@ locals {
   #subnet_name   = "my_vpc_subnet"
   nginx_count    = "2"
   backend_count  = "2"
-  iscsi_count    = "1"
-  db_count       = "3"
-  proxysql_count = "1"
+  iscsi_count    = "0"
+  db_count       = "0"
+  proxysql_count = "0"
   jump_count = "1"
   /*
   disk = {
