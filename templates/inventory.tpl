@@ -51,3 +51,4 @@ ${ jump-server["name"] }
 
 [all:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump="${ remote_user }@${ jump-servers[0].network_interface[0].nat_ip_address }"'
+#ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -p 22 -W %h:%p -q ${ remote_user }@${ jump-servers[0].network_interface[0].nat_ip_address }"'
