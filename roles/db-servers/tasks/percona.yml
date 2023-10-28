@@ -104,7 +104,7 @@
     ansible.builtin.package:
       name: 
         - percona-xtradb-cluster
-        #- python3-PyMySQL
+        - python3-PyMySQL
       state: latest
 
     # systemctl restart percona
@@ -150,7 +150,7 @@
       name: mysql
       state: stopped
 
-  - name: Change root password in .my.cnf.
+  - name: Configure /etc/my.cnf.
     ansible.builtin.lineinfile:
       path: /etc/my.cnf
       state: present
@@ -163,21 +163,121 @@
      - { key: '^wsrep_node_name=', value: 'wsrep_node_name={{ ansible_hostname }}' }
      - { key: 'wsrep_node_address=', value: 'wsrep_node_address={{ ansible_host }}' }
 
+  - name: Template config file ssl.cnf to /etc/my.cnf.d/
+    ansible.builtin.template:
+      src: "percona/{{ item }}.j2"
+      dest: "/etc/my.cnf.d/{{ item }}"
+    with_items: 
+     - ssl.cnf
+
   when: ansible_os_family == "RedHat"
 
-## systemctl start mysql@bootstrap.service
-#- name: Start mysql@bootstrap service
-#  ansible.builtin.service:
-#    name: mysql@bootstrap
-#    state: started
-#    #enabled: true
-#  when: "ansible_hostname in 'db-01'"
+- name: Copy mysql certificates from /var/lib/mysql to /tmp
+  ansible.builtin.fetch:
+    src: "/var/lib/mysql/{{ item }}"
+    dest: /tmp/fetched
+  with_items: 
+   - server-key.pem
+   - server-cert.pem
+   - ca.pem
+  when: "ansible_hostname in 'db-01'"
 
-## systemctl start mysql@bootstrap.service
-#- name: Start mysql@bootstrap service
-#  ansible.builtin.service:
-#    name: mysql
-#    state: started
-#    #enabled: true
-#  when: "ansible_hostname not in 'db-01'"
+- name: Copy mysql certificates from /tmp to /var/lib/mysql
+  ansible.builtin.copy:
+    src: "/tmp/fetched/db-01/var/lib/mysql/{{ item }}"
+    dest: "/var/lib/mysql/{{ item }}"
+  with_items: 
+   - server-key.pem
+   - server-cert.pem
+   - ca.pem
+  when: "ansible_hostname not in 'db-01'"
 
+# systemctl start mysql@bootstrap.service
+- name: Start mysql@bootstrap service in first db-server
+  ansible.builtin.service:
+    name: mysql@bootstrap
+    state: started
+  when: "ansible_hostname in 'db-01'"
+
+# systemctl start mysql.service
+- name: Start mysql service in other db-servers
+  ansible.builtin.service:
+    name: mysql
+    state: started
+    enabled: true
+  when: "ansible_hostname not in 'db-01'"
+
+- name: Add database
+  block:
+
+  # systemctl stop mysql@bootstrap.service
+  - name: Stop mysql@bootstrap service in first db-server
+    ansible.builtin.service:
+      name: mysql@bootstrap
+      state: stopped
+
+  # systemctl start mysql.service
+  - name: Start mysql service in first db-server
+    ansible.builtin.service:
+      name: mysql
+      state: started
+      enabled: true
+
+  # mysql -e "CREATE DATABASE cars;"
+  - name: Create application database
+    community.mysql.mysql_db: 
+      name: "{{ db_name }}"
+      state: "present"
+      collation: "{{ db_collation }}"
+      login_user: "{{ mysql_root_user }}"
+      login_password: "{{ mysql_root_password }}"
+
+  # cp percona/cars.sql /tmp/
+  - name: Copy SQL dump file to the server
+    ansible.builtin.copy:
+      src: "percona/{{ db_dump_file }}"
+      dest: /tmp
+    when: db_dump_file != ""
+
+  # mysql cars < /tmp/cars.sql
+  - name: Dump file into the database
+    community.mysql.mysql_db: 
+      name: "{{ db_name }}"
+      state: import
+      target: "/tmp/{{ db_dump_file | basename }}"
+      login_user: "{{ mysql_root_user }}"
+      login_password: "{{ mysql_root_password }}"
+    when: db_dump_file != ""
+
+  # mysql -e "CREATE USER 'myuser'@'%' IDENTIFIED BY 'anotherreallylongP@ssw0rd';"
+  # mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'muuser'@'%';"
+  # or
+  # mysql -e "GRANT ALL PRIVILEGES ON cars.* TO 'myuser'@'%' IDENTIFIED BY 'anotherreallylongP@ssw0rd';"
+  - name: Create Application user database
+    community.mysql.mysql_user: 
+      name: "{{ db_user }}"
+      password: "{{ db_user_password }}"
+      priv: "{{ db_name }}.*:ALL"
+      host: "{{ db_host }}"
+      state: present
+      login_user: "{{ mysql_root_user }}"
+      login_password: "{{ mysql_root_password }}"
+
+  # mysql -e "CREATE USER 'phpadmin'@'%' IDENTIFIED BY 'phpadmin@Otus1234';"
+  # mysql -e "GRANT SELECT,UPDATE,INSERT,DELETE ON cars.* TO 'phpadmin'@'%' REQUIRE SSL;"
+  # or
+  # mysql -e "GRANT SELECT,UPDATE,INSERT,DELETE ON cars.* TO 'phpadmin'@'%' IDENTIFIED BY 'anotherreallylongP@ssw0rd'; REQUIRE SSL"
+  - name: Create Application user database for php site
+    community.mysql.mysql_user:
+      name: "{{ mysql_php_user }}"
+      password: "{{ mysql_php_password }}"
+      priv: "{{ db_name }}.*:ALL"
+      #priv: "{{ db_name }}.*:ALL,GRANT,REQUIRESSL"
+      #tls_requires:
+      #  x509:
+      host: "{{ db_host }}"
+      state: present
+      login_user: "{{ mysql_root_user }}"
+      login_password: "{{ mysql_root_password }}"
+
+  when: "ansible_hostname in 'db-01'"
