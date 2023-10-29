@@ -14,3 +14,7 @@ db_user: myuser
 db_user_password: anotherreallylongP@ssw0rd
 db_host: "%"
 db_dump_file: "cars.sql"
+
+# Define proxysql user for proxysql server
+proxysql_user: proxysql
+proxysql_password: proxysql@Otus1234

@@ -79,6 +79,7 @@
 - name: RedHat OS
   block:
 
+  # rpm --import https://www.percona.com/downloads/RPM-GPG-KEY-percona
   - name: install percona key
     ansible.builtin.rpm_key:
       key: https://www.percona.com/downloads/RPM-GPG-KEY-percona
@@ -96,10 +97,11 @@
     ansible.builtin.dnf: 
       update_cache: yes
 
+  # percona-release setup pxc-80
   - name: percona-release setup pxc-80
     ansible.builtin.shell: echo 'y' | percona-release setup pxc-80
 
-  # dnf install Percona-Server-server-80
+  # dnf install percona-xtradb-cluster -y
   - name: Install packages
     ansible.builtin.package:
       name: 
@@ -107,7 +109,7 @@
         - python3-PyMySQL
       state: latest
 
-    # systemctl restart percona
+  # systemctl restart percona
   - name: Restart Percona service
     ansible.builtin.service:
       name: mysql
@@ -279,5 +281,22 @@
       state: present
       login_user: "{{ mysql_root_user }}"
       login_password: "{{ mysql_root_password }}"
+
+  # CREATE USER 'proxysql'@'%' IDENTIFIED WITH mysql_native_password by 'proxysql@Otus1234';
+  # GRANT USAGE ON *.* TO 'proxysql'@'%';
+  # or
+  # mysql -e "GRANT USAGE ON *.* TO 'proxysql'@'%' IDENTIFIED WITH mysql_native_password BY 'proxysql@Otus1234';"
+  - name: Create Application user database for proxysql
+    community.mysql.mysql_user: 
+      name: "{{ proxysql_user }}"
+      password: "{{ proxysql_password }}"
+      priv: "*.*:USAGE"
+      host: "{{ db_host }}"
+      state: present
+      login_user: "{{ mysql_root_user }}"
+      login_password: "{{ mysql_root_password }}"
+
+  # CREATE USER 'sbuser'@'192.168.70.74' IDENTIFIED BY 'sbpass';   # ip_address['proxysql-01']
+  # GRANT ALL ON *.* TO 'sbuser'@'192.168.70.74';   # ip_address['proxysql-01']
 
   when: "ansible_hostname in 'db-01'"
