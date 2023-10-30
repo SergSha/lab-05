@@ -92,11 +92,13 @@ resource "yandex_vpc_subnet" "subnets" {
 
 resource "yandex_vpc_gateway" "nat_gateway" {
   name = "test-gateway"
+  folder_id = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
   shared_egress_gateway {}
 }
 
 resource "yandex_vpc_route_table" "rt" {
   name       = "test-route-table"
+  folder_id  = yandex_resourcemanager_folder.folders["loadbalancer-folder"].id
   network_id = yandex_vpc_network.vpc.id
 
   static_route {

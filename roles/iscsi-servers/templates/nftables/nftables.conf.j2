@@ -5,7 +5,7 @@ flush ruleset
 table ip filter {
 
         chain ISCSI_INP {
-                tcp dport 3260 ct state new counter accept
+                ip saddr {{ subnet_cidrs }} tcp dport 3260 ct state new counter accept
         }
         chain INPUT {
                 type filter hook input priority filter; policy drop;
