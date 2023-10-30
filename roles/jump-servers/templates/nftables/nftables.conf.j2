@@ -4,12 +4,6 @@ flush ruleset
 
 table ip filter {
 
-        chain MYSQL_INP {
-                tcp dport {{ mysql_port }} ct state new counter accept
-        }
-        chain XTRAD_CLUSTER_INP {
-                tcp dport 4567 ct state new counter accept
-        }
         chain INPUT {
                 type filter hook input priority filter; policy drop;
                 ct state invalid counter drop
@@ -18,8 +12,6 @@ table ip filter {
                 udp dport 323 counter accept
                 ip saddr {{ subnet_cidrs }} icmp type echo-request counter accept
                 ct state established,related counter accept
-                counter jump MYSQL_INP
-                counter jump XTRAD_CLUSTER_INP
         }
 
         chain FORWARD {
