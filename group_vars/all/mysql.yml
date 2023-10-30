@@ -18,3 +18,5 @@ db_dump_file: "cars.sql"
 # Define proxysql user for proxysql server
 proxysql_user: proxysql
 proxysql_password: proxysql@Otus1234
+sbuser: sbuser
+sbuser_password: sbuser@Otus1234

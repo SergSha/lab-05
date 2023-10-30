@@ -297,6 +297,15 @@
       login_password: "{{ mysql_root_password }}"
 
   # CREATE USER 'sbuser'@'192.168.70.74' IDENTIFIED BY 'sbpass';   # ip_address['proxysql-01']
-  # GRANT ALL ON *.* TO 'sbuser'@'192.168.70.74';   # ip_address['proxysql-01']
+  # GRANT ALL ON *.* TO 'sbuser'@'10.10.10.x';   # ip_address['proxysql-01']
+  - name: Create Application user database for proxysql
+    community.mysql.mysql_user: 
+      name: "{{ sbuser }}"
+      password: "{{ sbuser_password }}"
+      priv: "*.*:ALL"
+      host: "{{ ip_address['proxysql-01'] }}"
+      state: present
+      login_user: "{{ mysql_root_user }}"
+      login_password: "{{ mysql_root_password }}"
 
   when: "ansible_hostname in 'db-01'"

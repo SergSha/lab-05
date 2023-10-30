@@ -7,6 +7,9 @@ table ip filter {
         chain MYSQL_INP {
                 tcp dport {{ mysql_port }} ct state new counter accept
         }
+        chain PROXYSQL_INP {
+                tcp dport { 6032,6033 } ct state new counter accept
+        }
         chain INPUT {
                 type filter hook input priority filter; policy drop;
                 ct state invalid counter drop
@@ -16,6 +19,7 @@ table ip filter {
                 ip saddr {{ subnet_cidrs }} icmp type echo-request counter accept
                 ct state established,related counter accept
                 counter jump MYSQL_INP
+                counter jump PROXYSQL_INP
         }
 
         chain FORWARD {

@@ -24,9 +24,12 @@
 #    setype: httpd_sys_rw_content_t
 #    state: present
 
-# setsebool -P httpd_can_network_connect_db 1
-- name: Set httpd_can_network_connect_db flag on and keep it persistent across reboots
+# setsebool -P httpd_can_network_connect_db 1; setsebool -P nis_enabled 1
+- name: Set httpd_can_network_connect_db and nis_enabled flags on and keep it persistent across reboots
   ansible.posix.seboolean:
-    name: httpd_can_network_connect_db
+    name: "{{ item }}"
     state: true
     persistent: true
+  with_items: 
+    - httpd_can_network_connect_db
+    - nis_enabled
